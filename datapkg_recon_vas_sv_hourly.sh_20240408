@@ -1,0 +1,224 @@
+#!/bin/bash
+
+cd /home/vasops/BUDI/cronscript/email
+HOST=`hostname`
+REPORT_PATH=/home/vasops/BUDI/cronscript/email
+SCRIPTNAME=`basename $0 | awk -F'.' '{print $1}'`
+SPOOLFILE1=${SCRIPTNAME}.spool1
+SPOOLFILE1=${SCRIPTNAME}.spool1
+SPOOLFILE31=${SCRIPTNAME}_details1.csv
+SPOOLFILE32=${SCRIPTNAME}_details2.csv
+SPOOLFILE3=${SCRIPTNAME}_details.csv
+
+Mailfile=${SCRIPTNAME}.html
+THRESHOLD=1
+
+v_start_time=`date '+%d%m%Y_%H:%M:%S'`
+echo "Start time: "$v_start_time
+perjam=`date -d '1 hour ago' '+%d-%h-%Y_%H'`
+kemarin=`date -d '-1 day' '+%d-%h-%Y'`
+selumbari=`date -d '-2 day' '+%d-%h-%Y'`
+bulan_kemarin=`date -d "last month" '+%Y-%b'`
+dtmfile=`date -d '1 hour ago' '+%d-%h-%Y_%H%M%S'`
+
+SPOOLFILE3=${SCRIPTNAME}_${dtmfile}.txt
+
+
+SUBJECT="[Recon_VAS_SV] EHF_DATAPKG on $perjam"
+
+. /home/vasops/BUDI/cronscript/email/.env_file
+. ~/env_file
+
+spool1 ()
+{
+
+cd $REPORT_PATH
+sqlplus -s $ehf <<END_OFF
+
+
+set serverout off
+set heading off
+set feedback off
+set linesize 500
+set pages 0
+
+spool $SPOOLFILE1
+
+SELECT TO_CHAR(CREATED_DATETIME, 'DD-MON-YYYY_HH24')||'|'||TARGET_SYSTEM||'|'||STATUS||'|'||COUNT(1) DATAPKG
+FROM EHF.EHF_DATAPKG a
+WHERE a.created_datetime BETWEEN to_date(to_char(sysdate-1/24,'YYYYMMDDHH24')||'0000','YYYYMMDDHH24MISS') 
+AND to_date(to_char(sysdate-1/24,'YYYYMMDDHH24')||'5959','YYYYMMDDHH24MISS')
+AND TARGET_SYSTEM ='SV' 
+and a.status not like '200___'
+AND a.STATUS not in (
+'00000',
+'-1301',
+'13502',
+'-5502',
+'5',    
+'14',
+'-1111',
+'-203' 
+)
+group by TO_CHAR(CREATED_DATETIME, 'DD-MON-YYYY_HH24'), TARGET_SYSTEM, STATUS;
+
+spool $SPOOLFILE31
+
+SELECT 'IN_TIME|KEY_ID|SUB_SCENARIO|SUBSCRIBER_MSISDN|TARGET_SYSTEM|STEP_NUMBER|KEYWORD|STATUS|STATUS_TEXT|TRANSACTION_ID|PROCESS_TYPE|REGISTRATION_KEY|ACTION|CHARGE_FLAG|SOURCE_ID|FIXED_PRICE|PAYMENT_SOURCE|PAYMENT_SOURCE_AMOUNT|VALIDITY|REGISTRATION_DATE|RETAILER_REGION|AMOUNT|EXT_TXN_ID' FROM DUAL
+UNION ALL
+SELECT TO_CHAR(IN_TIME,'YYYY-MON-DD HH24:MI:SS')||'|'||
+KEY_ID||'|'||SUB_SCENARIO||'|'||SUBSCRIBER_MSISDN||'|'||TARGET_SYSTEM||'|'||STEP_NUMBER||'|'||KEYWORD||'|'||STATUS||'|'||SUBSTR(STATUS_TEXT, 1,50 )||'|'||
+cari(cari(dbms_lob.substr( b.input_xml, 4000, 1 ),'TRANSACTION_ID>',2),'<',1) ||'|'||
+cari(cari(dbms_lob.substr( b.input_xml, 4000, 1 ),'PROCESS_TYPE>',2),'<',1) ||'|'||
+cari(cari(dbms_lob.substr( b.input_xml, 4000, 1 ),'REGISTRATION_KEY>',2),'<',1) ||'|'||
+cari(cari(dbms_lob.substr( b.input_xml, 4000, 1 ),'ACTION>',2),'<',1) ||'|'||
+cari(cari(dbms_lob.substr( b.input_xml, 4000, 1 ),'CHARGE_FLAG>',2),'<',1) ||'|'||
+cari(cari(dbms_lob.substr( b.input_xml, 4000, 1 ),'SOURCE_ID>',2),'<',1) ||'|'||
+cari(cari(dbms_lob.substr( b.input_xml, 4000, 1 ),'FIXED_PRICE>',2),'<',1) ||'|'||
+cari(cari(dbms_lob.substr( b.input_xml, 4000, 1 ),'PAYMENT_SOURCE>',2),'<',1) ||'|'||
+cari(cari(dbms_lob.substr( b.input_xml, 4000, 1 ),'PAYMENT_SOURCE_AMOUNT>',2),'<',1) ||'|'||
+cari(cari(dbms_lob.substr( b.input_xml, 4000, 1 ),'VALIDITY>',2),'<',1) ||'|'||
+cari(cari(dbms_lob.substr( b.input_xml, 4000, 1 ),'REGISTRATION_DATE>',2),'<',1) ||'|'||
+cari(cari(dbms_lob.substr( b.input_xml, 4000, 1 ),'RETAILER_REGION>',2),'<',1) ||'|'||
+cari(cari(dbms_lob.substr( b.input_xml, 4000, 1 ),'AMOUNT>',2),'<',1) ||'|'||
+a.EXT_TXN_ID
+FROM EHF.EHF_DATAPKG a, ehf.EHF_DATAPKG_XML b
+WHERE a.created_datetime BETWEEN to_date(to_char(sysdate-1/24,'YYYYMMDDHH24')||'0000','YYYYMMDDHH24MISS') 
+AND to_date(to_char(sysdate-1/24,'YYYYMMDDHH24')||'5959','YYYYMMDDHH24MISS')
+AND b.created_datetime BETWEEN to_date(to_char(sysdate-1/24,'YYYYMMDDHH24')||'0000','YYYYMMDDHH24MISS') 
+AND to_date(to_char(sysdate-1/24,'YYYYMMDDHH24')||'5959','YYYYMMDDHH24MISS')
+AND a.TARGET_SYSTEM ='SV'
+AND a.XML_REF_ID =b.ID 
+and a.status not like '200___'
+AND a.STATUS not in (
+'00000',
+'-1301',
+'13502',
+'-5502',
+'5',    
+'14',
+'-1111',
+'-203' 
+);
+
+spool off
+/
+quit;
+END_OFF
+
+sed '/^$/d' $SPOOLFILE31 > $SPOOLFILE32
+sed -e 's/ *$//g' $SPOOLFILE32 > $SPOOLFILE3
+#gzip -9 $SPOOLFILE3
+rm $SPOOLFILE31
+rm $SPOOLFILE32
+
+
+echo "INFORM-----> SPOOL1 REPORT FOR SENT MAIL SUCCESS " `date`;
+}
+
+create_html ()
+{
+
+cd $REPORT_PATH
+### CREATE HTML ###
+
+echo "<!DOCTYPE html>" > $Mailfile
+echo "<html>" >> $Mailfile
+echo "<head>" >> $Mailfile
+echo "<style>" >> $Mailfile
+echo "#grad1 {" >> $Mailfile
+echo "  height: 55px;" >> $Mailfile
+echo "  background-color: red; /* For browsers that do not support gradients */" >> $Mailfile
+echo "  background-image: linear-gradient(to right, red, orange, yellow, green, blue, indigo, violet);" >> $Mailfile
+echo "}" >> $Mailfile
+echo "</style>" >> $Mailfile
+echo "</head>" >> $Mailfile
+echo "<body>" >> $Mailfile
+echo "<b>Dear Helpdesk,</b> <br>" >> $Mailfile
+echo "Please log this recon to Billing Operation bucket.<br>" >> $Mailfile
+echo " " >> $Mailfile
+echo " " >> $Mailfile
+echo " " >> $Mailfile
+echo "<b>Dear BOT team,</b> <br>" >> $Mailfile
+echo "We observed DATA_PACKAGES got error response from SV on $perjam.<br>" >> $Mailfile
+echo "Please recon with PCRF.<br>" >> $Mailfile
+echo "PFA for the details and PFB for the summary:<br>" >> $Mailfile
+echo " " >> $Mailfile
+echo " " >> $Mailfile
+echo " " >> $Mailfile
+echo "<table style="width:50%"> " >> $Mailfile
+
+echo "<tr>" >> $Mailfile
+      echo "<th bgcolor='#000080'><p style="color:white"> CREATED_DATE_HOURLY </th>" >> $Mailfile
+          echo "<th bgcolor='#000080'><p style="color:white"> TARGET_SYSTEM </p></th>" >> $Mailfile
+          echo "<th bgcolor='#000080'><p style="color:white"> STATUS </p></th>" >> $Mailfile
+          echo "<th bgcolor='#000080'><p style="color:white"> HIT </p></th>" >> $Mailfile
+    echo "</tr>" >> $Mailfile
+
+for i in `cat $SPOOLFILE1` ; do
+        CREATED_DATE_HOURLY=`echo $i | awk -F'|' '{print $1}'`
+        TARGET_SYSTEM=`echo $i | awk -F'|' '{print $2}'`
+        STATUS=`echo $i | awk -F'|' '{print $3}'`
+        HIT=`echo $i | awk -F'|' '{print $4}'`
+
+        if  [ "${HIT}" -ge "$THRESHOLD" ]; then
+           BCOL="bgcolor='#ffff00'"
+        else
+           BCOL=""
+        fi
+
+       echo "<tr>" >> $Mailfile
+         echo "<td ${BCOL} align='center'>"${CREATED_DATE_HOURLY}"</td>" >> $Mailfile
+                 echo "<td ${BCOL} align='center'>"${TARGET_SYSTEM}"</td>" >> $Mailfile
+                 echo "<td ${BCOL} align='center'>"${STATUS}"</td>" >> $Mailfile
+                 echo "<td ${BCOL} align='center'>"${HIT}"</td>" >> $Mailfile
+       echo "</tr>" >> $Mailfile
+
+done
+
+echo "</table>" >> $Mailfile
+echo " " >> $Mailfile
+echo " " >> $Mailfile
+echo "<b>Best Regards,</b> <br>" >> $Mailfile
+echo "VAS Ops team<br>" >> $Mailfile
+echo " " >> $Mailfile
+echo "</body> " >> $Mailfile
+echo "</html> " >> $Mailfile
+
+}
+
+send_mail ()
+{
+if  [ "${HIT}" -ge "$THRESHOLD" ]; then
+echo "Start send Mail " `date`
+
+cd $REPORT_PATH
+
+#scp ${REPORT_PATH}/${Mailfile} $MAILSERVER:/home/bbadmin/BUDI/POSS
+#scp ${REPORT_PATH}/${SPOOLFILE3} $MAILSERVER:/home/bbadmin/BUDI/POSS
+#ssh -q $MAILSERVER "sh /home/bbadmin/BUDI/POSS/DATAPKG_perjam.sh '${SUBJECT}' ${Mailfile} ${SPOOLFILE3}"
+
+#TO="H3IBOT@TechMahindra.com;H3IRealTimeTeam@TechMahindra.com;tm.helpdesk@ioh.co.id"
+#CC="SanjayKumar.Singh@TechMahindra.com;GP0086041@TechMahindra.com;H3IVAS@Techmahindra.com;OCCH3I@techmahindra.com;H3IMIS@Techmahindra.com"
+
+TO="${Mail_BOT};${Mail_RT};${Mail_HD};${Mail_BCCSOPS}"
+CC="${Mail_Sanjay};${Mail_Gagan};${Mail_VAS};${Mail_OCC};${Mail_MIS}"
+
+/vasops/SentMailAttach.sh "${SUBJECT}" "${TO}" "${CC}" "${REPORT_PATH}/${Mailfile}" "${REPORT_PATH}" "${SPOOLFILE3}"
+
+
+fi
+
+echo "End send Mail " `date`
+}
+
+spool1;
+create_html;
+send_mail;
+echo "INFORM-----> REPORT SENT MAIL End. " `date`;
+
+v_end_time=`date '+%d/%m/%Y %H:%M:%S'`
+
+find /home/vasops/BUDI/cronscript/email/ -name "*recon_vas_sv_hourly*.txt" -mtime +14 -exec rm {} \;
+
+echo "End time: "$v_end_time
